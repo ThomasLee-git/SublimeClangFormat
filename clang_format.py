@@ -235,58 +235,30 @@ class ClangFormatCommand(sublime_plugin.TextCommand):
             regions = self.view.sel()
 
         for region in regions:
-            region_offset = region.begin()
-            region_length = region.size()
+            current_buf = self.view.substr(region)
+            current_p = subprocess.Popen(command, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+            output, error = current_p.communicate(current_buf.encode(encoding))
+            # Display any errors returned by clang-format using a message box,
+            # instead of just printing them to the console. Also, we halt on all
+            # errors: e.g. We don't just settle for using using a default style.
+            if error:
+                # We don't want to do anything by default.
+                # If the error message tells us it is doing that, truncate it.
+                default_message = ", using LLVM style"
+                msg = error.decode("utf-8")
+                if msg.strip().endswith(default_message):
+                    msg = msg[:-len(default_message)-1]
+                sublime.error_message("Clang format: " + msg)
+                # Don't do anything.
+                return
 
-            view = sublime.active_window().active_view()
+            # If there were no errors, we replace the view with the outputted buf.
+            self.view.replace(
+                edit, region,
+                output.decode(encoding))
 
-            # If the command is run at the end of the line,
-            # Run the command on the whole line.
-            if view.classify(region_offset) & sublime.CLASS_LINE_END > 0:
-                region        = view.line(region_offset)
-                region_offset = region.begin()
-                region_lenth  = region.size()
-
-            command.extend(['-offset', str(region_offset),
-                            '-length', str(region_length)])
-
-        # We only set the offset once, otherwise CF complains.
-        command.extend(['-assume-filename', str(self.view.file_name())] )
-
-        # TODO: Work out what this does.
-        # command.extend(['-output-replacements-xml'])
-
-        # Run CF, and set buf to its output.
-        buf = self.view.substr(sublime.Region(0, self.view.size()))
-        startupinfo = None
-        if os_is_windows:
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        p   = subprocess.Popen(command, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, stdin=subprocess.PIPE,
-                               startupinfo=startupinfo)
-        output, error = p.communicate(buf.encode(encoding))
-
-        # Display any errors returned by clang-format using a message box,
-        # instead of just printing them to the console. Also, we halt on all
-        # errors: e.g. We don't just settle for using using a default style.
-        if error:
-            # We don't want to do anything by default.
-            # If the error message tells us it is doing that, truncate it.
-            default_message = ", using LLVM style"
-            msg = error.decode("utf-8")
-            if msg.strip().endswith(default_message):
-                msg = msg[:-len(default_message)-1]
-            sublime.error_message("Clang format: " + msg)
-            # Don't do anything.
-            return
-
-        # If there were no errors, we replace the view with the outputted buf.
-        self.view.replace(
-            edit, sublime.Region(0, self.view.size()),
-            output.decode(encoding))
-
-        # TODO: better semantics for re-positioning cursors!
+            # TODO: better semantics for re-positioning cursors!
 
 
 # Hook for on-save event, to allow application of clang-format on save.
