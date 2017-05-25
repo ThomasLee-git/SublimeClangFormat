@@ -226,7 +226,7 @@ class ClangFormatCommand(sublime_plugin.TextCommand):
         if style == "Custom":
             command = [binary, load_custom()]
         else:
-            command = [binary, '-style', _style]
+            command = [binary, '-style', _style, '-assume-filename', str(self.view.file_name())]
 
         regions = []
         if whole_buffer:
